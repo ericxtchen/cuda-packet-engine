@@ -1,0 +1,19 @@
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--header-insertion=never",
+    "--background-index",
+    "--clang-tidy"
+  ],
+  "cmake.configureOnOpen": true,
+  "clangd.path": "/usr/bin/clangd-22",
+
+  // Route formatting and code fixes through clangd on save
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+  
+  // Automatically apply safe linter fixes/quick-fixes whenever you save
+  "editor.codeActionsOnSave": {
+      "source.fixAll": "always"
+  }
+}
