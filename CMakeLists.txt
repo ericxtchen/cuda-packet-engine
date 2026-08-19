@@ -16,6 +16,7 @@ set(CMAKE_CUDA_ARCHITECTURES 89)
 add_library(cpe
     src/generator/generator.cpp
     src/device/ingest_kernel.cu
+    src/memory/memory.cu
 )
 target_include_directories(cpe PUBLIC include)
  
