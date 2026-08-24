@@ -38,7 +38,7 @@ HostBuffer allocate_host_buffer(AllocMode mode, std::size_t bytes) {
     host_buffer.host_ptr = new uint8_t[bytes];
     cudaMalloc(reinterpret_cast<void **>(&host_buffer.device_ptr), bytes);
     break;
-  case AllocMode::PinnedMapped:
+  case AllocMode::PinnedMapped: {
     unsigned int flags = cudaHostAllocMapped | cudaHostAllocWriteCombined;
     // cudaSetDeviceFlags(cudaDeviceMapHost); this should be executed once
     // during init
@@ -46,6 +46,12 @@ HostBuffer allocate_host_buffer(AllocMode mode, std::size_t bytes) {
                   flags);
     cudaHostGetDevicePointer(reinterpret_cast<void **>(&host_buffer.device_ptr),
                              host_buffer.host_ptr, 0);
+    break;
+  }
+  case AllocMode::SPSC:
+    // SPSC queues manage their own pinned rings via alloc_spsc_queues();
+    // this generic single-buffer path doesn't apply to that mode.
+    break;
   }
 
   return host_buffer;
@@ -59,6 +65,9 @@ void free_host_buffer(HostBuffer &buf) {
     break;
   case AllocMode::PinnedMapped:
     cudaFreeHost(buf.host_ptr);
+    break;
+  case AllocMode::SPSC:
+    break;
   }
 
   buf.device_ptr = nullptr;
@@ -72,5 +81,8 @@ void sync_to_device(const HostBuffer &buf, std::size_t bytes) {
     cudaMemcpy(buf.device_ptr, buf.host_ptr, bytes, cudaMemcpyHostToDevice);
     break;
   case AllocMode::PinnedMapped:
+    break; // no-op: host_ptr and device_ptr already alias the same memory
+  case AllocMode::SPSC:
+    break;
   }
 }

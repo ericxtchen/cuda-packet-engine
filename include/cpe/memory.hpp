@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-enum class AllocMode { Pageable, PinnedMapped };
+enum class AllocMode { Pageable, PinnedMapped, SPSC };
 
 struct HostBuffer {
   AllocMode mode;

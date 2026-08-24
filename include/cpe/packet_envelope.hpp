@@ -49,4 +49,11 @@ struct PacketFrame {
 };
 #pragma pack(pop)
 
+// generate_traffic() and alloc_spsc_queues() both assume one PacketFrame
+// exactly fills one ring-buffer slot. If a header field ever changes size
+// without SLOT_SIZE changing to match (or vice versa), this catches it at
+// compile time instead of as a silent out-of-bounds write/read at runtime.
+static_assert(sizeof(PacketFrame) == SLOT_SIZE,
+              "PacketFrame must exactly fill one SLOT_SIZE slot");
+
 #endif
