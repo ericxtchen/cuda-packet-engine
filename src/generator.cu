@@ -5,10 +5,12 @@
 #include <cstdio>
 #include <cstring>
 
-PacketFrame build_packet(uint64_t i) {
-  // variable payload size based on i
+PacketFrame build_packet(uint64_t i, PacketSizeMode mode) {
   const uint16_t payload_size =
-      MIN_PAYLOAD + (i % (MAX_PAYLOAD - MIN_PAYLOAD + 1));
+      mode == PacketSizeMode::Fixed64
+          ? static_cast<uint16_t>(MIN_PAYLOAD)
+          : static_cast<uint16_t>(MIN_PAYLOAD +
+                                  (i % (MAX_PAYLOAD - MIN_PAYLOAD + 1)));
   // Calculate slot offset and cast to PacketFrame pointer
   PacketFrame frame;
 
@@ -61,10 +63,11 @@ PacketFrame build_packet(uint64_t i) {
   return frame;
 }
 
-void producer_loop(SPSC_Queue *queue, std::atomic<bool> *running) {
+void producer_loop(SPSC_Queue *queue, std::atomic<bool> *running,
+                   PacketSizeMode mode) {
   uint64_t i = 0;
   while (running->load(std::memory_order_relaxed)) {
-    PacketFrame frame = build_packet(i);
+    PacketFrame frame = build_packet(i, mode);
     if (push(queue, frame)) {
       ++i;
     }
@@ -73,7 +76,8 @@ void producer_loop(SPSC_Queue *queue, std::atomic<bool> *running) {
 }
 
 std::vector<std::thread> start_generators(std::vector<SPSC_Queue *> &queues,
-                                          std::atomic<bool> *running) {
+                                          std::atomic<bool> *running,
+                                          PacketSizeMode mode) {
   std::vector<int> cores = distinct_physical_cores();
 
   constexpr size_t RESERVED_FOR_MAIN = 1; // core 0 stays free for main/OS
@@ -95,7 +99,7 @@ std::vector<std::thread> start_generators(std::vector<SPSC_Queue *> &queues,
   std::vector<std::thread> threads;
   threads.reserve(queues.size());
   for (size_t i = 0; i < queues.size(); ++i) {
-    threads.emplace_back(producer_loop, queues[i], running);
+    threads.emplace_back(producer_loop, queues[i], running, mode);
     pin_thread_to_core(threads.back(), cores[RESERVED_FOR_MAIN + i]);
   }
   return threads;
@@ -118,9 +122,9 @@ uint16_t compute_ipv4_checksum(const void *vdata, size_t length) {
   return static_cast<uint16_t>(~acc); // One's complement
 }
 
-void generate_traffic(uint8_t *buf, size_t num_packets) {
+void generate_traffic(uint8_t *buf, size_t num_packets, PacketSizeMode mode) {
   for (size_t i = 0; i < num_packets; ++i) {
-    PacketFrame frame = build_packet(i);
+    PacketFrame frame = build_packet(i, mode);
     std::memcpy(buf + i * SLOT_SIZE, &frame, sizeof(PacketFrame));
   }
 }

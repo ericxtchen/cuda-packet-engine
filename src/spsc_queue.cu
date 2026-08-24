@@ -1,18 +1,39 @@
 #include "cpe/spsc_queue.cuh"
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cuda/atomic>
 
 SPSC_Queue::SPSC_Queue(const size_t count) {
   this->count = count;
   unsigned int flags = cudaHostAllocMapped | cudaHostAllocWriteCombined;
-  cudaHostAlloc(reinterpret_cast<void **>(&this->host_ptr),
-                count * sizeof(PacketFrame), flags);
+
+  // Over-allocate by TLP_MISALIGN_PAD_BYTES (0 unless built with
+  // -DSPE_TLP_MISALIGN) and hand back a pointer offset past the pad.
+  uint8_t *raw = nullptr;
+  cudaHostAlloc(reinterpret_cast<void **>(&raw),
+                count * sizeof(PacketFrame) + TLP_MISALIGN_PAD_BYTES, flags);
+
+  this->host_ptr =
+      reinterpret_cast<PacketFrame *>(raw + TLP_MISALIGN_PAD_BYTES);
   cudaHostGetDevicePointer(reinterpret_cast<void **>(&this->device_ptr),
                            this->host_ptr, 0);
+
+  if (reinterpret_cast<uintptr_t>(this->host_ptr) % PCIE_TLP_BYTES != 0) {
+    std::fprintf(stderr,
+                 "note: SPSC ring buffer base %p is not %zu-byte aligned; "
+                 "slots will not land on PCIe TLP boundaries (expected if "
+                 "built with -DSPE_TLP_MISALIGN)\n",
+                 static_cast<void *>(this->host_ptr), PCIE_TLP_BYTES);
+  }
 }
 
 SPSC_Queue::~SPSC_Queue() {
-  cudaFreeHost(this->host_ptr);
+  if (this->host_ptr) {
+    uint8_t *raw =
+        reinterpret_cast<uint8_t *>(this->host_ptr) - TLP_MISALIGN_PAD_BYTES;
+    cudaFreeHost(raw);
+  }
   this->host_ptr = nullptr;
   this->device_ptr = nullptr;
 }

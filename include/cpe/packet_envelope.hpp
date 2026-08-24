@@ -13,6 +13,22 @@ constexpr size_t BATCH_BYTES = BATCH_PACKETS * SLOT_SIZE; // ~100 MB per batch
 constexpr size_t MIN_PAYLOAD = 18;
 constexpr size_t MAX_PAYLOAD = 1472;
 
+constexpr size_t PCIE_TLP_BYTES = 128;
+
+// SPE_TLP_MISALIGN is off by default and SLOT_SIZE (1536 = 12 * 128) is
+// already a multiple of PCIE_TLP_BYTES, so with a page-aligned ring-buffer
+// base, every slot boundary already sits on a TLP boundary
+// To get the purposely unalign it for a before/after
+// comparison, build with -DSPE_TLP_MISALIGN.
+// This shifts the ring buffer's base address by TLP_MISALIGN_PAD_BYTES bytes
+// (see spsc_queue.cu), which uniformly knocks every slot off its natural 128B
+// boundary without touching SLOT_SIZE or anything else.
+#ifdef SPE_TLP_MISALIGN
+constexpr size_t TLP_MISALIGN_PAD_BYTES = 64;
+#else
+constexpr size_t TLP_MISALIGN_PAD_BYTES = 0;
+#endif
+
 #pragma pack(push, 1)
 struct EthernetHeader {
   uint8_t dest_mac[6];
@@ -55,5 +71,9 @@ struct PacketFrame {
 // compile time instead of as a silent out-of-bounds write/read at runtime.
 static_assert(sizeof(PacketFrame) == SLOT_SIZE,
               "PacketFrame must exactly fill one SLOT_SIZE slot");
+
+static_assert(SLOT_SIZE % PCIE_TLP_BYTES == 0,
+              "SLOT_SIZE must be a multiple of PCIE_TLP_BYTES for slots to "
+              "land on PCIe TLP boundaries by construction");
 
 #endif

@@ -31,6 +31,7 @@ add_library(cpe
     src/memory.cu
     src/spsc_queue.cu
     src/affinity.cpp
+    src/parse_kernel.cu
 )
 
 target_include_directories(cpe
