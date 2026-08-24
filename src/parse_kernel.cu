@@ -14,6 +14,7 @@ __device__ bool device_ipv4_checksum_valid(const IPv4Header &hdr) {
   while (acc >> 16) {
     acc = (acc & 0xFFFF) + (acc >> 16);
   }
+
   return static_cast<uint16_t>(~acc) == 0;
 }
 
@@ -43,8 +44,16 @@ __device__ void parse_one(const PacketFrame &pkt, ParseCounters *counters) {
     cs_ref.fetch_add(1ULL, cuda::memory_order_relaxed);
   }
 
-  uint32_t h = hash_five_tuple(pkt.ip.src_ip, pkt.ip.dest_ip, pkt.udp.src_port,
-                               pkt.udp.dest_port, pkt.ip.protocol);
+  // Safely extract packed fields without triggering unaligned 32-bit loads
+  uint32_t src_ip = 0, dest_ip = 0;
+  uint16_t src_port = 0, dest_port = 0;
+  std::memcpy(&src_ip, &pkt.ip.src_ip, sizeof(src_ip));
+  std::memcpy(&dest_ip, &pkt.ip.dest_ip, sizeof(dest_ip));
+  std::memcpy(&src_port, &pkt.udp.src_port, sizeof(src_port));
+  std::memcpy(&dest_port, &pkt.udp.dest_port, sizeof(dest_port));
+
+  uint32_t h =
+      hash_five_tuple(src_ip, dest_ip, src_port, dest_port, pkt.ip.protocol);
   uint32_t bucket = h % NUM_FLOW_BUCKETS;
 
   cuda::atomic_ref<uint64_t, cuda::thread_scope_system> bucket_ref(
@@ -92,10 +101,11 @@ __global__ void pop_and_parse(SPSC_Queue *queues, size_t num_queues,
       uint64_t seq_index = local_tail + static_cast<uint64_t>(lane);
       uint64_t slot = seq_index % queue->count;
 
-      PacketFrame item = queue->device_ptr[slot];
+      // Access slot directly by const reference to avoid 1536-byte stack copies
+      const PacketFrame &item = queue->device_ptr[slot];
 
       uint64_t seq = 0;
-      memcpy(&seq, item.payload, sizeof(seq));
+      std::memcpy(&seq, item.payload, sizeof(seq));
       if (seq != seq_index) {
         errors_ref.fetch_add(1ULL, cuda::memory_order_relaxed);
       }
