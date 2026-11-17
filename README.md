@@ -1,6 +1,6 @@
 # cuda-packet-engine
 
-This project is a synthetic, high-throughput GPU packet processing engine that offlaods networking tasks from the NIC to the GPU. CPE (cuda-packet-engine) eliminates host-side packet processing bottlenecks by leveraging zero-copy host-mapped memory, thread-pinned CPU traffic generators, and system-scope PCIe atomics.
+An experimental C++/CUDA packet-ingestion engine investigating CPU-to-GPU data movement and synchronization. The project compares explicit host-to-device copies, mapped pinned memory, and persistent GPU consumers communicating through SPSC ring buffers using synthetic network traffic.
 
 Running this with `--benchmark` so far compares 3 different approaches for doing the same packet processing approach: 
 
